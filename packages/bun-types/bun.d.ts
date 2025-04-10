@@ -1731,15 +1731,15 @@ declare module "bun" {
     /** Indicates if the query has been cancelled */
     cancelled: boolean;
     /** Cancels the executing query */
-    cancel(): SQLQuery<T>;
+    cancel(): SQLQuery<SQLTypeUnwrap<T>>;
     /** Execute as a simple query, no parameters are allowed but can execute multiple commands separated by semicolons */
-    simple(): SQLQuery<T>;
+    simple(): SQLQuery<SQLTypeUnwrap<T>>;
     /** Executes the query */
-    execute(): SQLQuery<T>;
+    execute(): SQLQuery<SQLTypeUnwrap<T>>;
     /** Returns the raw query result */
-    raw(): SQLQuery<T>;
+    raw(): SQLQuery<SQLRaw<SQLTypeUnwrap<T>>>;
     /** Returns only the values from the query result */
-    values(): SQLQuery<T>;
+    values(): SQLQuery<SQLValues<SQLTypeUnwrap<T>>>;
   }
 
   /**
@@ -1767,11 +1767,36 @@ declare module "bun" {
   }
 
   /**
+   * Internal utility to unwrap a wrapped SQLQuery
+   */
+  type SQLTypeUnwrap<T> = T extends SQLRaw<infer I> ? I : T extends SQLValues<infer I> ? I : T;
+
+  /**
+   * Internal SQLQuery raw result
+   */
+  interface SQLRaw<T> { raw: T };
+
+  /**
+   * Internal SQLQuery values result
+   */
+  interface SQLValues<T> { values: T };
+
+  /**
+   * Internal utility to unwrap the final result
+   */
+  type SQLResultUnwrap<T> = 
+    T extends SQLRaw<infer _> ? Array<Buffer> 
+    : T extends SQLValues<infer I> ? 
+      I extends object ? Array<I[keyof I]>
+      : I 
+    : T;
+
+  /**
    * A SQLQuery result
    */
-  interface SQLQueryResult<T = any> extends Array<T> {
+  interface SQLQueryResult<T = any> extends Array<SQLResultUnwrap<T>> {
     /** Query of this result */
-    query?: SQLQuery;
+    query?: SQLQuery<T>;
     /** Statement of this query */
     statement?: SQLQueryStatement;
     /** Columns of this query */
@@ -1817,13 +1842,13 @@ declare module "bun" {
      * @example
      * const [user] = await sql`select * from users where id = ${1}`;
      */
-    (strings: string | TemplateStringsArray, ...values: any[]): SQLQuery;
+    <T = any>(strings: string | TemplateStringsArray, ...values: any[]): SQLQuery<T>;
     /**
      * Helper function to allow easy use to insert values into a query
      * @example
      * const result = await sql`insert into users ${sql(users)} RETURNING *`;
      */
-    (obj: any): SQLQuery;
+    <T = any>(obj: any): SQLQuery<T>;
     /** Commits a distributed transaction also know as prepared transaction in postgres or XA transaction in MySQL
      * @example
      * await sql.commitDistributed("my_distributed_transaction");
